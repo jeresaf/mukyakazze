@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from accounts.serializers import StrictSerializer
 from accounts.services import audit
-from .models import Country, City, Area, Venue, Promoter
+from .models import Country, City, Area, Venue, Promoter, Sponsor
 
 RESOURCES = {
     'countries': (Country, None, None),
@@ -15,12 +15,14 @@ RESOURCES = {
     'areas': (Area, 'city', City),
     'venues': (Venue, 'area', Area),
     'promoters': (Promoter, None, None),
+    'sponsors': (Sponsor, None, None),
 }
 CHILDREN = {Country: (City, 'country'), City: (Area, 'city'), Area: (Venue, 'area')}
 PRIVATE_FIELDS = {'contact_name', 'contact_phone', 'contact_email'}
 EXTRA_FIELDS = {
     Venue: ('venue_type', 'address', 'website', 'contact_phone', 'latitude', 'longitude'),
     Promoter: ('contact_name', 'contact_phone', 'contact_email', 'website'),
+    Sponsor: ('contact_name', 'contact_phone', 'contact_email', 'website'),
 }
 
 

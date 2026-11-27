@@ -1,0 +1,8 @@
+# Phase 02E–02F — sponsors and media (candidate)
+Sponsors reuse the directory permissions, private contact policy, reversible archive and audit behavior. No sample sponsors or media seeded.
+
+Media: authenticated JPEG/PNG uploads, 5 MiB input/output and 12 megapixel maximum, single frame, decoded and re-encoded with metadata stripped, EXIF orientation applied. Content checksum describes the processed bytes, not original. Metadata editable with optimistic versioning; bytes immutable. All five staff roles can view active images; Administrator/Editor upload and edit; archived content only accessible to staff with change permission. Collector/Verifier scoped upload is deferred until event ownership exists. No public URLs. No original binary retention. No media attachment to events or sponsors yet; these relationships will be added with the event/editorial modules.
+
+Development storage decision: bounded database binary fields for atomic metadata/content writes and backup simplicity. S3 adapter, quotas, load testing, retention policy, malware scanning policy and production backup qualification remain required before live use. Nginx request limit 6 MiB. No SVG or other formats. Pillow direct pin requires clean installation verification.
+
+Run system checks, migration consistency, and `pytest -q -p no:cacheprovider` in disposable development database. Expected total 32 tests (24 prior + 8). Confirm sponsor private contact permissions, upload/preview/edit/archive/restore, and existing account/category/directory workflows. Browser tests and security qualification pending. Preserve .env and database volume. Source-only candidate until tests executed.

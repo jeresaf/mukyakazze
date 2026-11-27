@@ -86,3 +86,27 @@ class Promoter(DirectoryRecord):
     class Meta(DirectoryRecord.Meta):
         constraints = DirectoryRecord.Meta.constraints + [models.UniqueConstraint(Lower('name'), name='catalog_promoter_name_unique')]
         permissions = [('view_private_contacts', 'View private directory contacts')]
+
+
+class Sponsor(DirectoryRecord):
+    contact_name = models.CharField(max_length=150, blank=True, default='')
+    contact_phone = models.CharField(max_length=40, blank=True, default='')
+    contact_email = models.EmailField(blank=True, default='')
+    website = models.URLField(max_length=250, blank=True, default='')
+
+    class Meta(DirectoryRecord.Meta):
+        constraints = DirectoryRecord.Meta.constraints + [models.UniqueConstraint(Lower('name'), name='catalog_sponsor_name_unique')]
+
+
+class MediaAsset(DirectoryRecord):
+    kind = models.CharField(max_length=16, choices=[('poster', 'Event poster'), ('cover', 'Cover photo'), ('logo', 'Logo'), ('photo', 'Other photo')])
+    mime_type = models.CharField(max_length=16)
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    size_bytes = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64, db_index=True)
+    content = models.BinaryField(editable=False)
+    alt_text = models.CharField(max_length=250, blank=True, default='')
+
+    class Meta(DirectoryRecord.Meta):
+        constraints = DirectoryRecord.Meta.constraints + [models.CheckConstraint(condition=models.Q(kind__in=['poster', 'cover', 'logo', 'photo']), name='catalog_media_kind_valid'), models.CheckConstraint(condition=models.Q(mime_type__in=['image/jpeg', 'image/png']), name='catalog_media_mime_valid'), models.CheckConstraint(condition=models.Q(size_bytes__gte=1, size_bytes__lte=5242880), name='catalog_media_size_valid')]

@@ -1,7 +1,7 @@
 import {useEffect,useState,type FormEvent} from 'react';
 import {api,type Page} from './api';
 
-type Resource='countries'|'cities'|'areas'|'venues'|'promoters';
+type Resource='countries'|'cities'|'areas'|'venues'|'promoters'|'sponsors';
 type RecordRow={id:string;name:string;is_active:boolean;version:number;parent_name?:string;[key:string]:unknown};
 type Field={key:string;label:string;type?:string;max?:number;min?:number;length?:number;private?:boolean};
 const config:Record<Resource,{title:string;singular:string;parent?:Resource;parentKey?:string;fields:Field[]}>= {
@@ -9,6 +9,7 @@ const config:Record<Resource,{title:string;singular:string;parent?:Resource;pare
  cities:{title:'Cities',singular:'city',parent:'countries',parentKey:'country_id',fields:[]},
  areas:{title:'Areas',singular:'area',parent:'cities',parentKey:'city_id',fields:[]},
  venues:{title:'Venues',singular:'venue',parent:'areas',parentKey:'area_id',fields:[{key:'venue_type',label:'Venue type',length:100},{key:'address',label:'Physical address',length:250},{key:'website',label:'Website',type:'url',length:250},{key:'contact_phone',label:'Private contact phone',length:40,private:true},{key:'latitude',label:'Latitude',type:'number',min:-90,max:90},{key:'longitude',label:'Longitude',type:'number',min:-180,max:180}]},
+ sponsors:{title:'Sponsors',singular:'sponsor',fields:[{key:'contact_name',label:'Private contact name',length:150,private:true},{key:'contact_phone',label:'Private contact phone',length:40,private:true},{key:'contact_email',label:'Private contact email',type:'email',length:254,private:true},{key:'website',label:'Website',type:'url',length:250}]},
  promoters:{title:'Promoters',singular:'promoter',fields:[{key:'contact_name',label:'Private contact name',length:150,private:true},{key:'contact_phone',label:'Private contact phone',length:40,private:true},{key:'contact_email',label:'Private contact email',type:'email',length:254,private:true},{key:'website',label:'Website',type:'url',length:250}]},
 };
 function ParentPicker({resource,name}:{resource:Resource;name:string}){
@@ -28,6 +29,6 @@ function DirectorySection({resource,canManage,privateAccess}:{resource:Resource;
  <section className="panel space-y-4"><h2>{c.title} directory</h2><form className="flex flex-wrap gap-3 items-end" onSubmit={e=>{e.preventDefault();setPage(1);setQuery(search);setRevision(n=>n+1);setError('')}}><label>Search<input value={search} onChange={e=>setSearch(e.target.value)}/></label><label>Status<select className="block border rounded-md p-2 mt-1" value={status} onChange={e=>{setPage(1);setStatus(e.target.value)}}><option value="active">Active</option><option value="archived">Archived</option><option value="all">All</option></select></label><button>Search</button></form><div className="overflow-x-auto"><table><caption className="sr-only">{c.title} directory</caption><thead><tr><th>Name</th>{c.parent&&<th>Parent</th>}<th>Status</th>{canManage&&<th>Actions</th>}</tr></thead><tbody>{data?.results.map(r=><tr key={r.id}><td>{r.name}</td>{c.parent&&<td>{r.parent_name}</td>}<td>{r.is_active?'Active':'Archived'}</td>{canManage&&<td><div className="flex gap-2"><button disabled={busy} onClick={()=>setEdit(r)}>Edit</button><button disabled={busy} onClick={()=>void toggle(r)}>{r.is_active?'Archive':'Restore'}</button></div></td>}</tr>)}</tbody></table></div>{data?.count===0&&<p>No matching records.</p>}<div className="flex gap-2 items-center"><button disabled={!data?.previous} onClick={()=>setPage(p=>p-1)}>Previous</button><span>Page {page} · {data?.count??'—'} records</span><button disabled={!data?.next} onClick={()=>setPage(p=>p+1)}>Next</button></div></section>{canManage&&edit&&<form key={edit.id+'-'+edit.version} className="panel space-y-4" onSubmit={e=>void save(e,edit)}><h2>Edit {edit.name}</h2>{inputs(edit)}<div className="flex gap-2"><button className="primary" disabled={busy}>Save changes</button><button type="button" onClick={()=>setEdit(null)}>Cancel</button></div></form>}</>;
 }
 export function Directory({screen,canManage,privateAccess}:{screen:string;canManage:boolean;privateAccess:boolean}){
- const [location,setLocation]=useState<Resource>('countries');const resource=screen==='Venues'?'venues':screen==='Promoters'?'promoters':location;
+ const [location,setLocation]=useState<Resource>('countries');const resource=screen==='Venues'?'venues':screen==='Promoters'?'promoters':screen==='Sponsors'?'sponsors':location;
  return <>{screen==='Locations'&&<nav aria-label="Location types" className="flex gap-2 flex-wrap">{(['countries','cities','areas'] as Resource[]).map(r=><button key={r} aria-pressed={resource===r} className={resource===r?'primary':''} onClick={()=>setLocation(r)}>{config[r].title}</button>)}</nav>}<DirectorySection key={resource} resource={resource} canManage={canManage} privateAccess={privateAccess}/></>;
 }

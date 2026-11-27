@@ -9,3 +9,6 @@ from catalog.directory import RESOURCES, DirectoryList, DirectoryDetail
 
 for resource in RESOURCES:
     urlpatterns += [path(base + resource + "/", DirectoryList.as_view(resource=resource)), path(base + resource + "/<uuid:pk>/", DirectoryDetail.as_view(resource=resource))]
+
+from catalog.media import MediaList, MediaDetail, MediaContent
+urlpatterns += [path(base+'media/', MediaList.as_view()), path(base+'media/<uuid:pk>/', MediaDetail.as_view()), path(base+'media/<uuid:pk>/content/', MediaContent.as_view())]

@@ -16,13 +16,17 @@ def provision_roles():
         group, _ = Group.objects.get_or_create(name=name)
         permissions = Permission.objects.filter(content_type__app_label='accounts', codename__in=['manage_accounts', 'view_security_audit']) if name == 'Administrator' else Permission.objects.none()
         catalog_permissions = Permission.objects.filter(content_type__app_label='catalog', codename__in=['view_category', 'manage_categories'] if name in ('Administrator', 'Editor') else ['view_category'])
-        directory_models = ('country', 'city', 'area', 'venue', 'promoter')
+        directory_models = ('country', 'city', 'area', 'venue', 'promoter', 'sponsor')
         codes = ['view_' + model for model in directory_models]
         if name in ('Administrator', 'Editor'):
             codes += [action + '_' + model for action in ('add', 'change') for model in directory_models]
             codes += ['view_private_contacts']
         directory_permissions = Permission.objects.filter(content_type__app_label='catalog', codename__in=codes)
-        group.permissions.set(list(permissions) + list(catalog_permissions) + list(directory_permissions))
+        media_codes = ['view_mediaasset']
+        if name in ('Administrator', 'Editor'):
+            media_codes += ['add_mediaasset', 'change_mediaasset']
+        media_permissions = Permission.objects.filter(content_type__app_label='catalog', codename__in=media_codes)
+        group.permissions.set(list(permissions) + list(catalog_permissions) + list(directory_permissions) + list(media_permissions))
 
 @transaction.atomic
 def allow_login(email, remote_address):

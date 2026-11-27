@@ -4,3 +4,5 @@ djangorestframework==3.16.1
 psycopg[binary]==3.2.12
 pytest==8.4.2
 pytest-django==4.11.1
+
+Pillow==12.3.0
