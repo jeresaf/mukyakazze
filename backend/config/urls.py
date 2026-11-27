@@ -21,3 +21,6 @@ urlpatterns += [path(base+'events/statistics/', EventStatistics.as_view()), path
 
 from events.assignments import AssignmentChoices, Assignments, Attachments
 urlpatterns += [path(base+'events/assignment-choices/', AssignmentChoices.as_view()), path(base+'events/<uuid:pk>/assignments/', Assignments.as_view()), path(base+'events/<uuid:pk>/attachments/', Attachments.as_view())]
+
+from events.workbooks import WorkbookImport, WorkbookExport
+urlpatterns += [path(base+'events/workbook/import/', WorkbookImport.as_view()), path(base+'events/workbook/export/', WorkbookExport.as_view())]
