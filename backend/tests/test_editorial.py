@@ -119,3 +119,96 @@ def test_settings_and_csrf():
     r=write(c,t,'patch',path,{'expected_version':1,'grid_day':'2026-12-12','picks_intro':'Synthetic intro'}); assert r.status_code==200,r.content
     assert r.json()['version']==2 and r.json()['grid_day']=='2026-12-12'
     assert write(c,t,'patch',path,{'expected_version':1,'picks_title':'Stale'}).status_code==409
+
+
+def cover_payload(**changes):
+    return {'expected_version':1,'accent':'#ffd400','name':'Synthetic cover','subtitle':'Synthetic subtitle',
+            'lines':[{'title':'Headline','body':'Description'}], 'photo_id':None,'headshot_id':None,**changes}
+
+
+def create_image(c,t,kind):
+    from io import BytesIO
+    from PIL import Image
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    buf=BytesIO(); Image.new('RGBA',(16,16),'yellow').save(buf,format='PNG')
+    r=c.post(BASE+'media/',{'name':'Synthetic '+kind,'kind':kind,'file':SimpleUploadedFile('test.png',buf.getvalue(),content_type='image/png')},HTTP_X_CSRFTOKEN=t)
+    assert r.status_code==201,r.content
+    return r.json()['id']
+
+
+def test_cover_update_media_and_audit():
+    c,t,u=staff('Editor'); i=issue(c,t); path=URL+i['id']+'/cover/'
+    photo=create_image(c,t,'cover'); headshot=create_image(c,t,'photo')
+    r=write(c,t,'put',path,cover_payload(photo_id=photo,headshot_id=headshot)); assert r.status_code==200,r.content
+    result=r.json(); assert result['accent']=='#FFD400' and result['version']==2
+    assert result['photo']['id']==photo and result['headshot']['id']==headshot
+    assert c.get(path).json()==result
+    assert AuditEvent.objects.filter(actor=u,target_id=i['id'],action='issue_cover_updated').exists()
+    assert write(c,t,'put',path,cover_payload()).status_code==409
+
+
+def test_cover_validation_and_archived_asset():
+    c,t,_=staff('Editor'); i=issue(c,t); path=URL+i['id']+'/cover/'
+    poster=create_image(c,t,'poster'); cover=create_image(c,t,'cover')
+    for p in [cover_payload(accent='yellow'),cover_payload(lines=[{'title':'Only','body':''}]),cover_payload(lines=[{'title':'A','body':'B'}]*4),cover_payload(photo_id=poster),cover_payload(photo_id='00000000-0000-0000-0000-000000000001'),cover_payload(photo_path='/private/test.png')]:
+        assert write(c,t,'put',path,p).status_code==400
+    r=write(c,t,'put',path,cover_payload(photo_id=cover)); assert r.status_code==200,r.content
+    assert write(c,t,'patch',BASE+'media/'+cover+'/',{'expected_version':1,'is_active':False}).status_code==200
+    result=c.get(path).json(); assert not result['photo']['valid'] and result['warnings']
+    assert write(c,t,'put',path,cover_payload(expected_version=2,photo_id=cover)).status_code==400
+
+
+@pytest.mark.parametrize('role',['Collector','Verifier','Publisher'])
+def test_presentation_permission(role):
+    admin,token,_=staff('Administrator'); i=issue(admin,token)
+    c,t,_=staff(role)
+    for suffix,payload in [('cover/',cover_payload()),('grid/',{'expected_version':1,'entries':[]})]:
+        path=URL+i['id']+'/'+suffix
+        assert c.get(path).status_code==403
+        assert write(c,t,'put',path,payload).status_code==403
+        assert Client().get(path).status_code==403
+        assert admin.put(path,payload,content_type='application/json').status_code==403
+
+
+def friday_roster(c,t,rows):
+    i=issue(c,t)
+    for r in rows[:2]:
+        r.editorial_date=date(2026,12,11);r.starts_at=datetime(2026,12,11,18,tzinfo=timezone.utc);r.save()
+    response=roster(c,t,i,[entry(x) for x in rows[:2]])
+    assert response.status_code==200,response.content
+    return response.json()
+
+
+def test_grid_collision_and_spans(occurrences):
+    c,t,u=staff('Editor'); i=friday_roster(c,t,occurrences); path=URL+i['id']+'/grid/'
+    preview=c.get(path).json(); assert [x['slot'] for x in preview['placements']]==[1,1]
+    assert any('Collision' in x for x in preview['warnings'])
+    r=write(c,t,'put',path,{'expected_version':i['version'],'entries':[entry(occurrences[0],span=2)]})
+    assert r.status_code==200,r.content
+    assert r.json()['placements'][0]['span']==2 and r.json()['warnings']==[]
+    assert AuditEvent.objects.filter(actor=u,target_id=i['id'],action='issue_grid_updated').exists()
+    assert write(c,t,'put',path,{'expected_version':i['version'],'entries':[]}).status_code==409
+    occurrences[0].refresh_from_db(); assert occurrences[0].starts_at==datetime(2026,12,11,18,tzinfo=timezone.utc)
+
+
+def test_grid_overnight_and_invalid_span(occurrences):
+    c,t,_=staff('Editor'); i=issue(c,t); row=occurrences[0]
+    row.editorial_date=date(2026,12,11); row.starts_at=datetime(2026,12,11,21,30,tzinfo=timezone.utc); row.save()
+    r=roster(c,t,i,[entry(row)]); assert r.status_code==200,r.content
+    i=r.json(); path=URL+i['id']+'/grid/'
+    assert c.get(path).json()['placements'][0]['slot']==3
+    for entries,expected in [([entry(row,span=3)],400),([entry(row,span=1)]*2,400),([entry(occurrences[2],span=1)],409)]:
+        assert write(c,t,'put',path,{'expected_version':i['version'],'entries':entries}).status_code==expected
+    assert Issue.objects.get(pk=i['id']).version==i['version']
+
+
+def test_grid_stale_event_and_changed_date(occurrences):
+    c,t,_=staff('Editor'); i=friday_roster(c,t,occurrences); path=URL+i['id']+'/grid/'
+    row=occurrences[0]
+    r=write(c,t,'put',path,{'expected_version':i['version'],'entries':[entry(row,span=1)]}); assert r.status_code==200,r.content
+    version=r.json()['version']
+    Occurrence.objects.filter(pk=row.pk).update(is_cancelled=True,version=2)
+    result=c.get(path).json(); assert result['placements']==[] and result['warnings']
+    assert write(c,t,'put',path,{'expected_version':version,'entries':[entry(row,span=1)]}).status_code==409
+    r=write(c,t,'patch',URL+i['id']+'/',{'expected_version':version,'grid_day':'2026-12-12'}); assert r.status_code==200,r.content
+    result=c.get(path).json(); assert result['placements']==[] and any('Grid date changed' in w for w in result['warnings'])

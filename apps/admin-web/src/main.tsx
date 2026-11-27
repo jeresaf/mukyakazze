@@ -10,7 +10,7 @@ import {EventWorkbooks} from './EventWorkbooks';
 import {Issues} from './Issues';
 import {EventStatistics} from './AdvancedEvents';
 const roles=['Administrator','Collector','Verifier','Editor','Publisher'];
-const planned=['Night grid','Covers & features','Coming up','Reports'];
+const planned=['Editorial features','Coming up','Reports'];
 function App(){
  const [session,setSession]=useState<Session|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[screen,setScreen]=useState('Overview'),[nav,setNav]=useState(false);
  async function refresh(){try{setSession(await api<Session>('auth/session/'));setError('');}catch(e){setError(String(e));}finally{setLoading(false);}}
