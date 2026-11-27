@@ -83,7 +83,8 @@ def output(row, user):
             'poster_id':row.poster_id,'poster_name':row.poster.name if row.poster else '',
             'editorial_date':row.editorial_date,'starts_at':row.starts_at.astimezone(KAMPALA).isoformat() if row.starts_at else None,'ends_at':row.ends_at.astimezone(KAMPALA).isoformat() if row.ends_at else None,
             'source':row.source,'notes':row.notes,'price_type':price.kind,'amount_ugx':price.amount_ugx,'price_note':price.note,'ticket_url':price.ticket_url,
-            'status':row.status,'is_cancelled':row.is_cancelled,'version':row.version,'can_edit':can_edit(user,row),
+            'can_repeat':user.pk == event.created_by_id and user.has_perm('events.add_occurrence') and can_edit(user,row),
+            'shared_event':event.occurrences.count() > 1, 'status':row.status,'is_cancelled':row.is_cancelled,'version':row.version,'can_edit':can_edit(user,row),
             'can_review':user.has_perm('events.review_occurrence') and user.pk not in (event.created_by_id,row.submitted_by_id), 'created_at':row.created_at,'updated_at':row.updated_at}
 
 def validate_refs(values):
@@ -157,8 +158,14 @@ class Events(generics.GenericAPIView):
         for key,lookup in [('from','editorial_date__gte'),('to','editorial_date__lte')]:
             if key in request.query_params:
                 qs=qs.filter(**{lookup:serializers.DateField().run_validation(request.query_params[key])})
-        if 'category' in request.query_params:
-            qs=qs.filter(event__category_id=serializers.UUIDField().run_validation(request.query_params['category']))
+        for key, lookup in [('category','event__category_id'),('venue','venue_id'),('area','venue__area_id'),('promoter','event__promoter_id'),('event','event_id')]:
+            if key in request.query_params:
+                qs=qs.filter(**{lookup:serializers.UUIDField().run_validation(request.query_params[key])})
+        if 'cancelled' in request.query_params:
+            value=request.query_params['cancelled']
+            if value not in ('true','false'):
+                raise serializers.ValidationError({'cancelled':'Use true or false.'})
+            qs=qs.filter(is_cancelled=value=='true')
         page = self.paginate_queryset(qs)
         return self.get_paginated_response([output(row,request.user) for row in page])
 
@@ -192,7 +199,7 @@ class EventDetail(APIView):
         if row.status not in ('DRAFT','RETURNED') or row.is_cancelled:
             return Response({'code':'state_conflict','message':'Only active drafts or returned events can be edited. Reopen first.'},status=409)
         merged={**current(row),**values}; validate_values(merged,exclude=row.pk)
-        if row.event.occurrences.count()!=1 and any(k in EVENT_FIELDS for k in values):
+        if row.event.occurrences.count()!=1 and any(k in values and values[k] != getattr(row.event,k) for k in EVENT_FIELDS):
             raise serializers.ValidationError({'event':'Shared event metadata requires a separate workflow.'})
         event=row.event; price=row.prices.get(tier='General')
         for key,value in values.items():

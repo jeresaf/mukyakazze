@@ -15,3 +15,6 @@ urlpatterns += [path(base+'media/', MediaList.as_view()), path(base+'media/<uuid
 
 from events.api import Events, EventDetail, EventAction, EventHistory
 urlpatterns += [path(base+'events/', Events.as_view()), path(base+'events/<uuid:pk>/', EventDetail.as_view()), path(base+'events/<uuid:pk>/actions/', EventAction.as_view()), path(base+'events/<uuid:pk>/history/', EventHistory.as_view())]
+
+from events.advanced import RepeatOccurrences, TicketTiers, EventStatistics
+urlpatterns += [path(base+'events/statistics/', EventStatistics.as_view()), path(base+'events/<uuid:pk>/repeat/', RepeatOccurrences.as_view()), path(base+'events/<uuid:pk>/ticket-tiers/', TicketTiers.as_view())]
