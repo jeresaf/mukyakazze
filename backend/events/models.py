@@ -29,6 +29,8 @@ class Occurrence(models.Model):
     status = models.CharField(max_length=16, choices=STATES, default='DRAFT', db_index=True)
     is_cancelled = models.BooleanField(default=False)
     version = models.PositiveIntegerField(default=1)
+    assigned_collector = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    assigned_reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
     submitted_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -72,3 +74,13 @@ class Verification(models.Model):
     class Meta:
         ordering = ['-created_at','id']
         constraints = [models.UniqueConstraint(fields=['occurrence','version'],name='events_decision_version_unique')]
+
+
+class EventAttachment(models.Model):
+    occurrence = models.ForeignKey(Occurrence, on_delete=models.PROTECT, related_name='attachments')
+    asset = models.ForeignKey('catalog.MediaAsset', on_delete=models.PROTECT)
+    position = models.PositiveSmallIntegerField()
+
+    class Meta:
+        ordering = ['position', 'pk']
+        constraints = [models.UniqueConstraint(fields=['occurrence','asset'], name='events_attachment_asset_unique'), models.UniqueConstraint(fields=['occurrence','position'], name='events_attachment_position_unique')]

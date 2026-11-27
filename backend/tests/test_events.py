@@ -242,3 +242,110 @@ def test_scoped_statistics_and_filters(full,catalog):
     assert c.get(URL+'statistics/').json()['active']==0
     assert c.get(URL+'?cancelled=true').json()['count']==1
     assert c.get(URL+'?cancelled=false').json()['count']==0
+
+
+def assign(c,t,row,collector=None,reviewer=None):
+    return write(c,t,'put',URL+row['id']+'/assignments/',{'expected_version':row['version'],'collector_id':str(collector.pk) if collector else None,'reviewer_id':str(reviewer.pk) if reviewer else None})
+
+
+def test_assignment_scope_and_reassignment(full):
+    owner,ot,_=staff('Collector','owner'); c,t,u=staff('Collector','assigned'); other,_,_=staff('Collector','other'); a,at,admin=staff('Administrator','admin')
+    row=draft(owner,ot,full); detail=URL+row['id']+'/'
+    assert c.get(detail).status_code==404
+    assert c.get(URL+'assignment-choices/?role=collector').status_code==403
+    assert assign(owner,ot,row,u).status_code==403
+    row=successful(assign(a,at,row,u))
+    assert c.get(detail).status_code==200 and other.get(detail).status_code==404
+    assert c.get(URL+'?assigned=collection').json()['count']==1
+    assert c.get(detail+'assignments/').json()['collector_id']==str(u.pk)
+    assert 'collector_name' not in c.get(detail+'assignments/').json()
+    assert assign(a,at,{**row,'version':1},u).status_code==409
+    row=successful(write(c,t,'patch',detail,{'expected_version':row['version'],'notes':'Assigned staff edit'}))
+    row=successful(assign(a,at,row))
+    assert c.get(detail).status_code==404 and owner.get(detail).status_code==200
+    assert AuditEvent.objects.filter(actor=admin,target_id=row['id'],action='event_assignments_updated').count()==2
+
+
+def test_assigned_review_and_independent_editor(full):
+    c,t,_=staff('Collector','owner'); a,at,admin=staff('Administrator','admin'); v,vt,verifier=staff('Verifier','reviewer'); other,ot,_=staff('Verifier','other')
+    row=draft(c,t,full)
+    row=successful(write(a,at,'patch',URL+row['id']+'/',{'expected_version':row['version'],'notes':'Editor contribution'}))
+    assert assign(a,at,row,reviewer=admin).status_code==400
+    row=successful(assign(a,at,row,reviewer=verifier))
+    row=successful(action(c,t,row,'submit'))
+    assert v.get(URL+'?assigned=review').json()['count']==1
+    assert action(other,ot,row,'review',reason='Not assigned').status_code==403
+    assert action(a,at,row,'review',reason='Contributor').status_code==403
+    row=successful(action(v,vt,row,'review',reason='Assigned review'))
+    row=successful(action(v,vt,row,'verify',reason='Independent',method='Call',evidence='Synthetic'))
+    assert assign(a,at,row).status_code==409
+
+
+def test_assignment_role_validation(full):
+    a,t,admin=staff('Administrator','admin'); c,ct,collector=staff('Collector','collector'); p,pt,publisher=staff('Publisher','pub'); v,vt,verifier=staff('Verifier','reviewer')
+    row=draft(a,t,full)
+    assert assign(a,t,row,collector=publisher).status_code==400
+    assert assign(a,t,row,reviewer=collector).status_code==400
+    assert assign(a,t,row,collector=verifier,reviewer=verifier).status_code==400
+    assert assign(a,t,row,reviewer=admin).status_code==400
+    verifier.is_active=False;verifier.save(update_fields=['is_active'])
+    assert assign(a,t,row,reviewer=verifier).status_code==400
+    choices=a.get(URL+'assignment-choices/?role=reviewer').json()['results']
+    assert str(verifier.pk) not in [x['id'] for x in choices]
+
+
+def make_event_image(c,t,kind='photo'):
+    from io import BytesIO
+    from PIL import Image
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    b=BytesIO();Image.new('RGB',(16,12),'blue').save(b,format='PNG')
+    response=c.post(BASE+'media/',{'name':'Synthetic '+kind,'kind':kind,'file':SimpleUploadedFile('image.png',b.getvalue(),content_type='image/png')},HTTP_X_CSRFTOKEN=t)
+    assert response.status_code==201,response.content
+    return response.json()['id']
+
+
+def attachments(c,t,row,ids):
+    return write(c,t,'put',URL+row['id']+'/attachments/',{'expected_version':row['version'],'asset_ids':ids})
+
+
+def test_attachment_order_scope_and_repeated_copy(full):
+    a,at,_=staff('Administrator','admin'); c,t,_=staff('Collector','owner'); other,ot,_=staff('Collector','other')
+    photo=make_event_image(a,at);poster=make_event_image(a,at,'poster')
+    row=draft(c,t,full);detail=URL+row['id']+'/'
+    assert other.get(detail+'attachments/').status_code==404
+    row=successful(attachments(c,t,row,[photo,poster]))
+    assert [i['asset_id'] for i in c.get(detail+'attachments/').json()['images']]==[photo,poster]
+    assert attachments(c,t,{**row,'version':1},[]).status_code==409
+    row=successful(attachments(c,t,row,[poster,photo]))
+    r=write(c,t,'post',detail+'repeat/',{'expected_version':row['version'],'dates':['2026-12-18']})
+    assert r.status_code==201,r.content
+    child=r.json()['created_ids'][0]
+    assert [i['asset_id'] for i in c.get(URL+child+'/attachments/').json()['images']]==[poster,photo]
+    assert c.get(URL+child+'/assignments/').json()['collector_id'] is None
+    assert AuditEvent.objects.filter(target_id=row['id'],action='event_attachments_updated').count()==2
+
+
+def test_attachment_validation_and_archived_asset(full):
+    a,at,_=staff('Administrator','admin'); c,t,_=staff('Collector','owner')
+    photo=make_event_image(a,at);poster=make_event_image(a,at,'poster');logo=make_event_image(a,at,'logo')
+    row=draft(c,t,{**full,'poster_id':poster})
+    for ids in ([photo,photo],[poster],[logo],[photo]*13):
+        assert attachments(c,t,row,ids).status_code==400
+    row=successful(attachments(c,t,row,[photo]))
+    assert write(a,at,'patch',BASE+'media/'+photo+'/',{'expected_version':1,'is_active':False}).status_code==200
+    assert action(c,t,row,'submit').status_code==400
+    row=successful(attachments(c,t,row,[]))
+    row=successful(action(c,t,row,'submit'))
+    assert attachments(c,t,row,[]).status_code==409
+
+
+def test_media_editor_cannot_verify_after_reassignment(full):
+    c,t,_=staff('Collector','owner'); a,at,_=staff('Administrator','admin'); v,vt,verifier=staff('Verifier','contributor'); other,ot,_=staff('Verifier','other')
+    photo=make_event_image(a,at); row=draft(c,t,full)
+    row=successful(assign(a,at,row,collector=verifier))
+    row=successful(attachments(v,vt,row,[photo]))
+    row=successful(assign(a,at,row))
+    assert assign(a,at,row,reviewer=verifier).status_code==400
+    row=successful(action(c,t,row,'submit'))
+    assert action(v,vt,row,'review',reason='Former contributor').status_code==403
+    assert action(other,ot,row,'review',reason='Independent').status_code==200

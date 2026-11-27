@@ -9,9 +9,9 @@ from rest_framework.generics import get_object_or_404
 from accounts.serializers import StrictSerializer
 from accounts.services import audit
 from catalog.directory import directory_lock
-from .models import Occurrence, Price, PRICE_TYPES, STATES
+from .models import Occurrence, Price, PRICE_TYPES, STATES, EventAttachment
 from .api import (EventAccess, scope, locked, can_edit, conflict, current, output,
-                  validate_values, OCC_FIELDS, KAMPALA)
+                  validate_values, OCC_FIELDS, KAMPALA, validate_attachments)
 
 MAX_ADDITIONAL_DATES = 52
 
@@ -43,6 +43,8 @@ class RepeatOccurrences(APIView):
             return Response({'code': 'state_conflict', 'message': 'Repeat dates must be generated from an active draft or returned event.'}, status=409)
         original = current(row)
         validate_values(original, exclude=row.pk, complete=True)
+        validate_attachments(row, row.poster_id)
+        attachments = list(row.attachments.values("asset_id", "position"))
         origin = row.editorial_date
         dates = data.validated_data['dates']
         if any(d <= origin or d > origin + timedelta(days=366) for d in dates):
@@ -59,6 +61,7 @@ class RepeatOccurrences(APIView):
             validate_values(values, complete=True)
             child = Occurrence.objects.create(event=row.event, **{key: values[key] for key in OCC_FIELDS})
             Price.objects.bulk_create([Price(occurrence=child, **price) for price in prices])
+            EventAttachment.objects.bulk_create([EventAttachment(occurrence=child, **asset) for asset in attachments])
             audit(request.user, 'event_occurrence_created', child.pk, source_occurrence_id=str(row.pk), event_id=str(row.event_id))
             ids.append(str(child.pk))
         row.version += 1

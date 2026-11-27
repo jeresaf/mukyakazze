@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from accounts.serializers import StrictSerializer
 from accounts.services import audit
+from accounts.models import AuditEvent
 from catalog.directory import directory_lock
 from catalog.models import Category, Venue, Promoter, MediaAsset
 from .models import Event, Occurrence, Price, Verification, STATES, PRICE_TYPES
@@ -66,13 +67,31 @@ def scope(user):
     qs = Occurrence.objects.select_related('event','event__category','event__promoter','venue','venue__area','venue__area__city','poster').defer('poster__content')
     if not user.has_perm('events.manage_all_occurrences'):
         if user.has_perm('events.review_occurrence'):
-            qs = qs.filter(Q(event__created_by=user) | ~Q(status='DRAFT'))
+            qs = qs.filter(Q(event__created_by=user) | Q(assigned_collector=user) | ~Q(status='DRAFT'))
         else:
-            qs = qs.filter(event__created_by=user)
+            qs = qs.filter(Q(event__created_by=user) | Q(assigned_collector=user))
     return qs
 
 def can_edit(user, row):
-    return user.has_perm('events.change_occurrence') and (user.has_perm('events.manage_all_occurrences') or row.event.created_by_id == user.pk)
+    return user.has_perm('events.change_occurrence') and (user.has_perm('events.manage_all_occurrences') or user.pk in (row.event.created_by_id, row.assigned_collector_id))
+
+def is_contributor(user, row):
+    # Conservative series-wide exclusion: shared metadata and repeated content may
+    # have been supplied by editors of any sibling. Historical submissions count.
+    if user.pk in (row.event.created_by_id, row.submitted_by_id, row.assigned_collector_id):
+        return True
+    return AuditEvent.objects.filter(actor=user, target_id__in=Occurrence.objects.filter(event_id=row.event_id).values('pk'), action__in=['event_updated','event_submit','event_ticket_tiers_updated','event_attachments_updated']).exists()
+
+def can_review(user, row):
+    return (user.has_perm('events.review_occurrence') and not is_contributor(user, row)
+            and row.assigned_reviewer_id in (None, user.pk))
+
+def validate_attachments(row, poster_id):
+    ids = list(row.attachments.values_list('asset_id', flat=True))
+    if poster_id in ids:
+        raise serializers.ValidationError({'poster_id':'The main poster cannot also be an additional image.'})
+    if len(list(MediaAsset.objects.select_for_update().filter(pk__in=ids, is_active=True, kind__in=['poster','photo']).values_list('pk', flat=True))) != len(ids):
+        raise serializers.ValidationError({'attachments':'Additional images must be active event posters or photos.'})
 
 def output(row, user):
     event = row.event
@@ -85,7 +104,7 @@ def output(row, user):
             'source':row.source,'notes':row.notes,'price_type':price.kind,'amount_ugx':price.amount_ugx,'price_note':price.note,'ticket_url':price.ticket_url,
             'can_repeat':user.pk == event.created_by_id and user.has_perm('events.add_occurrence') and can_edit(user,row),
             'shared_event':event.occurrences.count() > 1, 'status':row.status,'is_cancelled':row.is_cancelled,'version':row.version,'can_edit':can_edit(user,row),
-            'can_review':user.has_perm('events.review_occurrence') and user.pk not in (event.created_by_id,row.submitted_by_id), 'created_at':row.created_at,'updated_at':row.updated_at}
+            'can_review':can_review(user,row), 'created_at':row.created_at,'updated_at':row.updated_at}
 
 def validate_refs(values):
     for field, model in REFERENCES.items():
@@ -161,6 +180,12 @@ class Events(generics.GenericAPIView):
         for key, lookup in [('category','event__category_id'),('venue','venue_id'),('area','venue__area_id'),('promoter','event__promoter_id'),('event','event_id')]:
             if key in request.query_params:
                 qs=qs.filter(**{lookup:serializers.UUIDField().run_validation(request.query_params[key])})
+        if 'assigned' in request.query_params:
+            assignment = request.query_params['assigned']
+            if assignment == 'collection': qs = qs.filter(assigned_collector=request.user)
+            elif assignment == 'review': qs = qs.filter(assigned_reviewer=request.user)
+            elif assignment == 'unassigned_review': qs = qs.filter(assigned_reviewer__isnull=True)
+            else: raise serializers.ValidationError({'assigned':'Invalid assignment filter.'})
         if 'cancelled' in request.query_params:
             value=request.query_params['cancelled']
             if value not in ('true','false'):
@@ -199,6 +224,8 @@ class EventDetail(APIView):
         if row.status not in ('DRAFT','RETURNED') or row.is_cancelled:
             return Response({'code':'state_conflict','message':'Only active drafts or returned events can be edited. Reopen first.'},status=409)
         merged={**current(row),**values}; validate_values(merged,exclude=row.pk)
+        if merged.get("poster_id") in row.attachments.values_list("asset_id", flat=True):
+            raise serializers.ValidationError({"poster_id":"The main poster cannot also be an additional image."})
         if row.event.occurrences.count()!=1 and any(k in values and values[k] != getattr(row.event,k) for k in EVENT_FIELDS):
             raise serializers.ValidationError({'event':'Shared event metadata requires a separate workflow.'})
         event=row.event; price=row.prices.get(tier='General')
@@ -224,7 +251,7 @@ class EventAction(APIView):
         if action=='submit':allowed=can_edit(request.user,row)
         elif action=='reopen':allowed=manage
         elif action in ('cancel','restore'):allowed=reviewer
-        else:allowed=reviewer and request.user.pk not in (row.event.created_by_id,row.submitted_by_id)
+        else:allowed=can_review(request.user,row)
         if not allowed:return Response({'code':'forbidden','message':'This action is not permitted. Self-review is not allowed.'},status=403)
         if stale(row,v['expected_version']):return conflict()
         transitions={'submit':(('DRAFT','RETURNED'),'SUBMITTED'),'review':(('SUBMITTED',),'UNDER_REVIEW'),'verify':(('UNDER_REVIEW',),'VERIFIED'),'return':(('SUBMITTED','UNDER_REVIEW'),'RETURNED'),'reject':(('UNDER_REVIEW',),'REJECTED'),'reopen':(('VERIFIED','REJECTED','SUBMITTED','UNDER_REVIEW'),'DRAFT')}
@@ -243,6 +270,7 @@ class EventAction(APIView):
                 return Response({'code':'state_conflict','message':'Action not allowed in the current state.'},status=409)
             if action in ('submit','verify'):
                 validate_values(current(row),exclude=row.pk,complete=True)
+                validate_attachments(row, row.poster_id)
             if action=='submit':row.submitted_by=request.user
             row.status=new
         row.version+=1;row.save()

@@ -18,3 +18,6 @@ urlpatterns += [path(base+'events/', Events.as_view()), path(base+'events/<uuid:
 
 from events.advanced import RepeatOccurrences, TicketTiers, EventStatistics
 urlpatterns += [path(base+'events/statistics/', EventStatistics.as_view()), path(base+'events/<uuid:pk>/repeat/', RepeatOccurrences.as_view()), path(base+'events/<uuid:pk>/ticket-tiers/', TicketTiers.as_view())]
+
+from events.assignments import AssignmentChoices, Assignments, Attachments
+urlpatterns += [path(base+'events/assignment-choices/', AssignmentChoices.as_view()), path(base+'events/<uuid:pk>/assignments/', Assignments.as_view()), path(base+'events/<uuid:pk>/attachments/', Attachments.as_view())]
