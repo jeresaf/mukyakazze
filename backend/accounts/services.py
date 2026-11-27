@@ -26,7 +26,15 @@ def provision_roles():
         if name in ('Administrator', 'Editor'):
             media_codes += ['add_mediaasset', 'change_mediaasset']
         media_permissions = Permission.objects.filter(content_type__app_label='catalog', codename__in=media_codes)
-        group.permissions.set(list(permissions) + list(catalog_permissions) + list(directory_permissions) + list(media_permissions))
+        event_codes = []
+        if name in ('Administrator', 'Collector', 'Verifier', 'Editor'):
+            event_codes += ['view_occurrence','add_occurrence','change_occurrence']
+        if name in ('Administrator', 'Verifier', 'Editor'):
+            event_codes += ['review_occurrence']
+        if name in ('Administrator', 'Editor'):
+            event_codes += ['manage_all_occurrences']
+        event_permissions = Permission.objects.filter(content_type__app_label='events', codename__in=event_codes)
+        group.permissions.set(list(permissions) + list(catalog_permissions) + list(directory_permissions) + list(media_permissions) + list(event_permissions))
 
 @transaction.atomic
 def allow_login(email, remote_address):

@@ -12,3 +12,6 @@ for resource in RESOURCES:
 
 from catalog.media import MediaList, MediaDetail, MediaContent
 urlpatterns += [path(base+'media/', MediaList.as_view()), path(base+'media/<uuid:pk>/', MediaDetail.as_view()), path(base+'media/<uuid:pk>/content/', MediaContent.as_view())]
+
+from events.api import Events, EventDetail, EventAction, EventHistory
+urlpatterns += [path(base+'events/', Events.as_view()), path(base+'events/<uuid:pk>/', EventDetail.as_view()), path(base+'events/<uuid:pk>/actions/', EventAction.as_view()), path(base+'events/<uuid:pk>/history/', EventHistory.as_view())]
