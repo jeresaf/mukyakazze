@@ -55,7 +55,7 @@ class Logout(APIView):
 class Session(APIView):
     permission_classes = [permissions.AllowAny]
     def get(self, request):
-        return Response({'user': UserOutput(request.user).data if request.user.is_authenticated else None, 'csrf_token': get_token(request), 'permissions': {'manage_accounts': request.user.has_perm('accounts.manage_accounts'), 'view_audit': request.user.has_perm('accounts.view_security_audit')}}, headers={'Cache-Control': 'no-store'})
+        return Response({'user': UserOutput(request.user).data if request.user.is_authenticated else None, 'csrf_token': get_token(request), 'permissions': {'manage_accounts': request.user.has_perm('accounts.manage_accounts'), 'view_audit': request.user.has_perm('accounts.view_security_audit'), 'view_categories': request.user.has_perm('catalog.view_category'), 'manage_categories': request.user.has_perm('catalog.manage_categories')}}, headers={'Cache-Control': 'no-store'})
 
 class Roles(APIView):
     permission_classes = [ManageAccounts]

@@ -15,7 +15,8 @@ def provision_roles():
     for name in ROLES:
         group, _ = Group.objects.get_or_create(name=name)
         permissions = Permission.objects.filter(content_type__app_label='accounts', codename__in=['manage_accounts', 'view_security_audit']) if name == 'Administrator' else Permission.objects.none()
-        group.permissions.set(permissions)
+        catalog_permissions = Permission.objects.filter(content_type__app_label='catalog', codename__in=['view_category', 'manage_categories'] if name in ('Administrator', 'Editor') else ['view_category'])
+        group.permissions.set(list(permissions) + list(catalog_permissions))
 
 @transaction.atomic
 def allow_login(email, remote_address):
