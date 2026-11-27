@@ -34,7 +34,8 @@ def provision_roles():
         if name in ('Administrator', 'Editor'):
             event_codes += ['manage_all_occurrences']
         event_permissions = Permission.objects.filter(content_type__app_label='events', codename__in=event_codes)
-        group.permissions.set(list(permissions) + list(catalog_permissions) + list(directory_permissions) + list(media_permissions) + list(event_permissions))
+        editorial_permissions = Permission.objects.filter(content_type__app_label='editorial', codename__in=['view_issue','change_issue']) if name in ('Administrator','Editor') else Permission.objects.none()
+        group.permissions.set(list(editorial_permissions) + list(permissions) + list(catalog_permissions) + list(directory_permissions) + list(media_permissions) + list(event_permissions))
 
 @transaction.atomic
 def allow_login(email, remote_address):

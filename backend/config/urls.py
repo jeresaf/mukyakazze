@@ -24,3 +24,6 @@ urlpatterns += [path(base+'events/assignment-choices/', AssignmentChoices.as_vie
 
 from events.workbooks import WorkbookImport, WorkbookExport
 urlpatterns += [path(base+'events/workbook/import/', WorkbookImport.as_view()), path(base+'events/workbook/export/', WorkbookExport.as_view())]
+
+from editorial.api import Issues, IssueDetail, Candidates, IssueRoster
+urlpatterns += [path(base+'issues/', Issues.as_view()), path(base+'issues/<uuid:pk>/', IssueDetail.as_view()), path(base+'issues/<uuid:pk>/candidates/', Candidates.as_view()), path(base+'issues/<uuid:pk>/roster/', IssueRoster.as_view())]
