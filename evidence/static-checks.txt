@@ -1,0 +1,11 @@
+Python compileall exit=0
+reference/mukyakazze-mcp.7z: OK
+npm offline install exit=1
+npm error code ENOTCACHED
+npm error request to https://registry.npmjs.org/@playwright%2ftest failed: cache mode is 'only-if-cached' but no cached response is available.
+npm error A complete log of this run can be found in: /home/oai/.npm/_logs/2026-11-27T07_22_36_987Z-debug-0.log
+WARNING: The directory '/home/oai/.cache/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+ERROR: Could not find a version that satisfies the requirement Django==5.2.8 (from versions: none)
+ERROR: No matching distribution found for Django==5.2.8
+JSON/YAML parsing: package.json, tsconfig.json, compose.yaml and phase01.yml passed.
+No backend runtime, migration, frontend build, browser or deployment test executed.

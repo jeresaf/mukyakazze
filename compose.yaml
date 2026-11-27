@@ -1,0 +1,26 @@
+# Development/staging qualification only. Do not deploy publicly.
+services:
+  db:
+    image: postgres:17
+    env_file: .env
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy
+    command: [sh, -c, 'python manage.py migrate && python manage.py provision_roles && python manage.py runserver 0.0.0.0:8000']
+  admin:
+    build: ./apps/admin-web
+    depends_on: [backend]
+    ports: ['127.0.0.1:8080:80']
+volumes:
+  postgres_data:

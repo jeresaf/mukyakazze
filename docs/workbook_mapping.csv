@@ -1,0 +1,77 @@
+sheet,source_field,target,migration_rule
+Events,Event ID,import_row.legacy_id,source-only; UUID is authority
+Events,Event Name *,event.title,required at submission
+Events,Category *,event.category_id,validated catalog
+Events,Date *,occurrence.editorial_date,actual date separately resolved
+Events,Start Time *,occurrence.starts_at,strict local time with explicit date
+Events,End Time,occurrence.ends_at,nullable; explicit end date
+Events,Venue *,occurrence.venue_id,catalog match/review
+Events,Area *,venue.area_id,catalog match/review
+Events,Price (UGX),price.amount_ugx,blank unknown; zero explicit free unless conditional note
+Events,Price Note,price.note / type,preserve conditional/free/from
+Events,Ticket Link,price.ticket_url,http(s) URL; no server fetch
+Events,Promoter,event.promoter_id,nullable catalog match
+Events,Contact Phone,promoter private contact / occurrence source contact,preserve source context; private
+Events,Contact Email,promoter private contact / occurrence source contact,private
+Events,Status *,occurrence.verification_status / cancellation,legacy mapping reviewed
+Events,Verified By,verification legacy initials + actor,never invent actor
+Events,Bugy Pick Rank,issue_pick.rank,1–7 scoped to issue
+Events,Why Go,issue_pick.why_go,layout warning >70 chars
+Events,Bugy Playing?,issue_pick.curator_playing,disclose
+Events,Paid Feature?,issue_event.paid_feature,commercial permission
+Events,Feature Fee (UGX),issue_event.feature_fee,recorded charge not paid
+Events,Grid Span,issue_event.grid_span,1–5 or default
+Events,Notes,occurrence.notes,private
+Events,Day,derived editorial weekday,ignore formula
+Events,In This Issue?,derived eligibility,ignore formula
+Events,Grid Slot,derived from actual time,ignore formula
+Issue,Issue Number,issue.number,typed input; preserve source value
+Issue,Week Start (Thursday),issue.week_start,typed input; preserve source value
+Issue,Week End,derived week_start + 6,derived; ignore formula
+Issue,Grid Day,issue.grid_day,"legacy formula default Friday, explicit override"
+Issue,Cover Accent,issue_cover.accent,typed input; preserve source value
+Issue,Cover Name,issue_cover.name,typed input; preserve source value
+Issue,Cover Subtitle,issue_cover.subtitle,typed input; preserve source value
+Issue,Cover Photo Path,issue_cover.photo_asset_id,asset upload; reject arbitrary filesystem paths
+Issue,Cover Line 1 Title,cover_line[1].title,typed input; preserve source value
+Issue,Cover Line 1 Text,cover_line[1].body,typed input; preserve source value
+Issue,Cover Line 2 Title,cover_line[2].title,typed input; preserve source value
+Issue,Cover Line 2 Text,cover_line[2].body,typed input; preserve source value
+Issue,Cover Line 3 Title,cover_line[3].title,typed input; preserve source value
+Issue,Cover Line 3 Text,cover_line[3].body,typed input; preserve source value
+Issue,Picks Title,issue_editorial.picks_title,typed input; preserve source value
+Issue,Picks Byline,issue_editorial.byline,typed input; preserve source value
+Issue,Picks Intro,issue_editorial.intro,typed input; preserve source value
+Issue,Headshot Path,issue_editorial.headshot_asset_id,asset upload; reject arbitrary filesystem paths
+Issue,Feature Title,issue_editorial.feature_title,typed input; preserve source value
+Issue,Feature Subtitle,issue_editorial.feature_subtitle,typed input; preserve source value
+Issue,Feature Kicker,issue_editorial.feature_kicker,typed input; preserve source value
+Issue,Sponsor Name,issue_editorial.sponsor_id,typed input; preserve source value
+Issue,Sponsor Logo Path,sponsor.logo_asset_id,asset upload; reject arbitrary filesystem paths
+Issue,Website,issue_editorial.website_label,typed input; preserve source value
+Issue,WhatsApp Channel,issue_editorial.whatsapp_label,typed input; preserve source value
+Issue,Submission Contact,issue_editorial.submission_contact,typed input; preserve source value
+Issue,Mock Label,issue.mock_flag / legacy_label,preserve label; mock blocks production
+Feature Tips,No.,feature_tip.position,1–5
+Feature Tips,Tip Title,feature_tip.title,required when row used
+Feature Tips,Tip Text (max ~110 characters),feature_tip.body,warn on layout length
+Coming Up,Date,teaser.date,stale date warning/block release
+Coming Up,Event Name,teaser.name,required
+Coming Up,Venue / Place,teaser.place,preserve display text
+Coming Up,Category,teaser.category_id,validated
+Lists,Category,category.code / label,exclude instruction row
+Lists,Colour (hex),category.colour,strict hex
+Lists,Area,area.name,review city parent
+Lists,Status,status enum,map four legacy statuses
+Lists,Yes/No,boolean,strict
+Lists,Cover Accent,theme palette,validated hex
+Dashboard,Category,report.category,derived
+Dashboard,Events in issue,report.eligible_count,derived
+Dashboard,Paid features,report.paid_feature_count,derived
+Dashboard,Feature revenue (UGX),report.recorded_fee_sum,not receipts
+Dashboard,Bugy's picks (need 7),readiness.pick_count,derived
+Dashboard,Pick ranks used twice,readiness.duplicate_ranks,derived
+Dashboard,Submissions waiting to verify,report.pending_count,derived
+Dashboard,Events on the grid night,readiness.grid_count,derived
+Dashboard,Week starts on a Thursday,readiness.thursday,derived
+How To Use,Instructions and weekly routine,help / settings,"preserve as operational guidance, not events"
