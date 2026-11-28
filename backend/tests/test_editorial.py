@@ -308,3 +308,115 @@ def test_features_teasers_permissions_and_csrf(role):
         assert write(c,t,'put',path,body).status_code==403
         assert Client().get(path).status_code==403
         assert admin.put(path,body,content_type='application/json').status_code==403
+
+
+def ready_issue(occurrences):
+    c,t,u=staff('Editor'); i=issue(c,t); path=URL+i['id']+'/'
+    original=occurrences[0]
+    original.editorial_date=date(2026,12,11); original.starts_at=datetime(2026,12,11,18,tzinfo=timezone.utc); original.save()
+    rows=[original,occurrences[1]]
+    for n in range(5):
+        event=Event.objects.create(title=f'Extra {n}',category=original.event.category,created_by=original.event.created_by)
+        row=Occurrence.objects.create(event=event,venue=original.venue,editorial_date=date(2026,12,12),starts_at=datetime(2026,12,12,18+n,tzinfo=timezone.utc),status='VERIFIED',submitted_by=original.event.created_by,source='Synthetic')
+        Price.objects.create(occurrence=row,kind='FREE',amount_ugx=0)
+        rows.append(row)
+    r=roster(c,t,i,[entry(row,rank=n,why_go='Synthetic recommendation') for n,row in enumerate(rows,1)])
+    assert r.status_code==200,r.content
+    r=write(c,t,'patch',path,{'expected_version':2,'picks_byline':'Curator','picks_intro':'Synthetic intro'}); assert r.status_code==200,r.content
+    cover=create_image(c,t,'cover'); photo=create_image(c,t,'photo')
+    r=write(c,t,'put',path+'cover/',cover_payload(expected_version=3,name='Cover name',subtitle='Cover subtitle',lines=[{'title':f'Headline {n}','body':'Text'} for n in range(3)],photo_id=cover,headshot_id=photo)); assert r.status_code==200,r.content
+    r=write(c,t,'put',path+'feature/',feature_payload(expected_version=4)); assert r.status_code==200,r.content
+    state=c.get(path+'review/').json()
+    assert state['ready'],state
+    return c,t,u,path,state,rows,cover
+
+
+def review_action(c,t,path,state,action,**extra):
+    return write(c,t,'post',path+'review/',{'action':action,'expected_version':state['version'],'fingerprint':state['fingerprint'],'decision_id':state['decision_id'],'reason':'Synthetic decision','acknowledge_warnings':True,**extra})
+
+
+def test_readiness_empty_issue_and_csrf():
+    c,t,_=staff('Editor'); i=issue(c,t); path=URL+i['id']+'/'
+    state=c.get(path+'review/').json()
+    assert state['state']=='DRAFT' and not state['ready'] and state['actions']==[]
+    assert any(x['code']=='picks' and not x['passed'] for x in state['checks'])
+    assert review_action(c,t,path,state,'submit').status_code==403
+    assert c.post(path+'review/',{},content_type='application/json').status_code==403
+    assert Client().get(path+'review/').status_code==403
+
+
+def test_editorial_submit_independent_approval(occurrences):
+    c,t,u,path,state,_,_=ready_issue(occurrences)
+    admin,token,actor=staff('Administrator')
+    assert review_action(c,t,path,state,'submit',acknowledge_warnings=False).status_code==400
+    r=review_action(c,t,path,state,'submit'); assert r.status_code==200,r.content
+    submitted=r.json(); assert submitted['state']=='SUBMITTED'
+    assert review_action(c,t,path,submitted,'approve').status_code==403
+    assert review_action(admin,token,path,state,'approve').status_code==409
+    seen=admin.get(path+'review/').json(); assert 'approve' in seen['actions']
+    r=review_action(admin,token,path,seen,'approve'); assert r.status_code==200,r.content
+    result=r.json(); assert result['state']=='APPROVED' and len(result['history'])==2
+    assert result['history'][0]['actor_id']==str(actor.pk)
+    assert review_action(admin,token,path,seen,'approve').status_code==409
+    assert c.get(path+'review/').json()['state']=='APPROVED'
+
+
+def test_approval_invalidated_by_reference_change(occurrences):
+    c,t,_,path,state,rows,cover=ready_issue(occurrences)
+    admin,token,_=staff('Administrator')
+    assert review_action(c,t,path,state,'submit').status_code==200
+    assert review_action(admin,token,path,admin.get(path+'review/').json(),'approve').status_code==200
+    row=rows[0]
+    Category.objects.filter(pk=row.event.category_id).update(version=2)
+    after=c.get(path+'review/').json(); assert after['state']=='STALE' and after['ready']
+    assert review_action(c,t,path,after,'submit').status_code==200
+    from catalog.models import MediaAsset
+    MediaAsset.objects.filter(pk=cover).update(is_active=False)
+    result=admin.get(path+'review/').json(); assert result['state']=='STALE' and not result['ready']
+    assert 'approve' not in result['actions']
+
+
+def test_approval_invalidated_by_issue_and_event_edits(occurrences):
+    c,t,_,path,state,rows,_=ready_issue(occurrences)
+    admin,token,_=staff('Administrator')
+    assert review_action(c,t,path,state,'submit').status_code==200
+    old=admin.get(path+'review/').json()
+    r=write(c,t,'patch',path,{'expected_version':state['version'],'picks_intro':'Revised intro'}); assert r.status_code==200,r.content
+    assert review_action(admin,token,path,old,'approve').status_code==409
+    result=c.get(path+'review/').json(); assert result['state']=='STALE'
+    assert review_action(c,t,path,result,'submit').status_code==200
+    Occurrence.objects.filter(pk=rows[0].pk).update(is_cancelled=True,version=2)
+    result=admin.get(path+'review/').json(); assert not result['ready'] and result['state']=='STALE'
+
+
+def test_return_and_teaser_review(occurrences):
+    c,t,_,path,state,_,_=ready_issue(occurrences)
+    admin,token,_=staff('Administrator')
+    r=write(c,t,'put',path+'teasers/',{'expected_version':state['version'],'entries':[teaser_payload()]}); assert r.status_code==200,r.content
+    state=c.get(path+'review/').json()
+    assert review_action(c,t,path,state,'submit').status_code==200
+    state=admin.get(path+'review/').json()
+    assert review_action(admin,token,path,state,'approve').status_code==400
+    r=review_action(admin,token,path,state,'return'); assert r.status_code==200,r.content
+    assert r.json()['state']=='RETURNED'
+    state=c.get(path+'review/').json(); assert review_action(c,t,path,state,'submit').status_code==200
+    state=admin.get(path+'review/').json()
+    r=review_action(admin,token,path,state,'approve',review_teasers=True); assert r.status_code==200,r.content
+    assert r.json()['state']=='APPROVED'
+    assert c.get(path+'teasers/').json()['entries'][0]['verification_status']=='UNVERIFIED_EDITORIAL_TEASER'
+
+
+def test_admin_contributor_cannot_approve(occurrences):
+    c,t,_,path,state,_,_=ready_issue(occurrences)
+    admin,token,_=staff('Administrator')
+    r=write(admin,token,'patch',path,{'expected_version':state['version'],'picks_intro':'Administrator edited'}); assert r.status_code==200,r.content
+    state=c.get(path+'review/').json(); assert review_action(c,t,path,state,'submit').status_code==200
+    state=admin.get(path+'review/').json()
+    assert 'approve' not in state['actions'] and review_action(admin,token,path,state,'approve').status_code==403
+
+
+@pytest.mark.parametrize('role',['Collector','Verifier','Publisher'])
+def test_review_permission(role):
+    c,t,_=staff('Editor'); i=issue(c,t); other,token,_=staff(role); path=URL+i['id']+'/review/'
+    assert other.get(path).status_code==403
+    assert write(other,token,'post',path,{}).status_code==403
