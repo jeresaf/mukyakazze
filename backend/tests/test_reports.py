@@ -1,5 +1,6 @@
 from datetime import timedelta
 from io import BytesIO
+from unittest.mock import patch
 import pytest
 from django.test import Client
 from django.utils import timezone
@@ -43,9 +44,11 @@ def test_cohort_counts_and_editor_privacy(occurrences):
 def test_staff_and_verification_timing(occurrences):
     c,_,u=staff('Administrator'); row=occurrences[0]
     row.assigned_reviewer=u; row.save(update_fields=['assigned_reviewer'])
-    a=Verification.objects.create(occurrence=row,actor=row.event.created_by,action='submit',reason='Test',version=2)
-    b=Verification.objects.create(occurrence=row,actor=u,action='verify',reason='Test',version=3)
-    now=timezone.now(); Verification.objects.filter(pk=a.pk).update(created_at=now-timedelta(hours=2)); Verification.objects.filter(pk=b.pk).update(created_at=now)
+    now=timezone.now()
+    with patch('django.utils.timezone.now', return_value=now-timedelta(hours=2)):
+        Verification.objects.create(occurrence=row,actor=row.event.created_by,action='submit',reason='Test',version=2)
+    with patch('django.utils.timezone.now', return_value=now):
+        Verification.objects.create(occurrence=row,actor=u,action='verify',reason='Test',version=3)
     d=c.get(URL+PERIOD).json(); assert d['verification']['completed_cycles']==1 and d['verification']['mean_hours']==2
     owner=next(x for x in d['staff'] if x['id']==str(row.event.created_by_id))
     admin=next(x for x in d['staff'] if x['id']==str(u.pk))
