@@ -36,3 +36,17 @@ input[type=color]{height:42px;padding:5px;} .workspace-content input,.workspace-
 @media(max-width:1100px){.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:767px){.workspace-shell{display:block;}.workspace-sidebar{position:static;height:auto;overflow:visible;}.workspace-brand{padding:15px 16px;}.mobile-menu{display:block;}.workspace-nav{display:none;}.workspace-nav.mobile-open{display:block;}.workspace-content{padding:14px;}.workspace-header{padding:12px 14px;}.dashboard-hero{padding:20px;}.workspace-content .panel{padding:14px;}.calendar-days{gap:3px;}.calendar-days button{font-size:10px;}.calendar-days button strong{font-size:17px;}.calendar-days button small{font-size:9px;}.schedule-row{grid-template-columns:76px minmax(0,1fr);gap:8px;}.schedule-row .status-chip{grid-column:2;justify-self:start;}.metric-grid{gap:8px;}.metric{padding:10px;}.metric strong{font-size:25px;}.chart-row{grid-template-columns:88px minmax(0,1fr) 28px;gap:6px;}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;}}
+
+/* Phase 05A.2 — compact overview and issue section navigation. */
+.dashboard-hero{padding:clamp(16px,2vw,22px);gap:12px;}
+.dashboard-hero h1{font-size:clamp(26px,3vw,34px);}
+.dashboard-hero .eyebrow{margin-bottom:3px;}.dashboard-hero p:not(.eyebrow){margin-top:4px;max-width:72ch;}
+.quick-action{min-height:64px;padding:10px 12px;}
+@media(min-width:768px){.workspace-sidebar{display:flex;flex-direction:column;height:100dvh;overflow:hidden;}.workspace-brand{flex:0 0 auto;padding:18px 16px;}.workspace-nav{min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#666 #111;}.nav-group{margin:5px 0 12px;}}
+.issue-tabs{display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:#fff;border:1px solid var(--workspace-line);border-radius:10px;}
+.issue-tabs button{border-color:transparent;background:#f4f2ec;color:#242424;min-height:40px;}
+.issue-tabs button[aria-pressed=true]{background:var(--workspace-yellow);color:#111;border-color:#c4a100;}
+.issue-tabs button:hover:not(:disabled){border-color:#777;}
+.issue-unsaved{border:1px solid #dbbd50;background:#fff7d5;padding:10px 12px;border-radius:8px;font-size:13px;color:#634b00;}
+.issue-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}.issue-summary-grid>div{display:flex;flex-direction:column;gap:6px;border:1px solid var(--workspace-line);padding:12px;border-radius:8px;min-width:0;}.issue-summary-grid span{font-size:12px;color:var(--workspace-muted);}.issue-summary-grid strong{font-size:clamp(15px,2vw,22px);overflow-wrap:anywhere;}
+@media(max-width:767px){.issue-tabs button{flex:1 1 120px;}.issue-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.dashboard-hero{padding:16px;}}
