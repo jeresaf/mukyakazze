@@ -2,13 +2,13 @@ import {useEffect,useState} from 'react';
 import {api,type Page,type Session} from './api';
 
 export const navigation = [
- {title:'Workspace',items:['Overview']},
+ {title:'Workspace',items:['Overview','Reports & analytics']},
  {title:'Data collection',items:['Events','Event calendar','Verification','Excel import & export']},
  {title:'Editorial',items:['Weekly issues & picks']},
  {title:'Directories & media',items:['Categories','Locations','Venues','Promoters','Sponsors','Media library']},
  {title:'Administration',items:['Users & roles','Audit log']},
 ];
-const symbols:Record<string,string>={'Overview':'◫','Events':'＋','Event calendar':'▦','Verification':'✓','Excel import & export':'⇅','Weekly issues & picks':'▤','Categories':'◇','Locations':'⌖','Venues':'▣','Promoters':'♙','Sponsors':'◈','Media library':'▧','Users & roles':'♧','Audit log':'≡'};
+const symbols:Record<string,string>={'Overview':'◫','Reports & analytics':'▥','Events':'＋','Event calendar':'▦','Verification':'✓','Excel import & export':'⇅','Weekly issues & picks':'▤','Categories':'◇','Locations':'⌖','Venues':'▣','Promoters':'♙','Sponsors':'◈','Media library':'▧','Users & roles':'♧','Audit log':'≡'};
 export function WorkspaceNav({permitted,screen,onNavigate,mobileOpen,onToggle}:{permitted:string[];screen:string;onNavigate:(screen:string)=>void;mobileOpen:boolean;onToggle:()=>void}){
  const [closed,setClosed]=useState<Record<string,boolean>>({});
  return <aside className="workspace-sidebar"><div className="workspace-brand"><div><div className="wordmark">MUKYAKAZZE<span>.</span></div><p>ADMIN WORKSPACE</p></div><button type="button" className="mobile-menu" aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={onToggle}>{mobileOpen?'Close menu':'Menu'}</button></div><nav id="workspace-navigation" className={mobileOpen?'workspace-nav mobile-open':'workspace-nav'} aria-label="Admin navigation">{navigation.map(group=>{const items=group.items.filter(x=>permitted.includes(x));if(!items.length)return null;const expanded=!closed[group.title];return <section className="nav-group" key={group.title}><button className="nav-group-label" type="button" aria-expanded={expanded} aria-controls={'nav-'+group.title.replaceAll(' ','-')} onClick={()=>setClosed(old=>({...old,[group.title]:expanded}))}>{group.title}<span aria-hidden="true">{expanded?'−':'+'}</span></button><div id={'nav-'+group.title.replaceAll(' ','-')} hidden={!expanded}>{items.map(x=><button type="button" key={x} className={'workspace-link '+(screen===x?'current':'')} aria-current={screen===x?'page':undefined} onClick={()=>onNavigate(x)}><span className="nav-symbol" aria-hidden="true">{symbols[x]}</span>{x}</button>)}</div></section>;})}<div className="workspace-sidebar-note">MUKYAKAZZE · STAFF ONLY<br/>Editorial approval is not publication.</div></nav></aside>;

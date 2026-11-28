@@ -36,3 +36,6 @@ urlpatterns += [path(base+'issues/<uuid:pk>/feature/', Feature.as_view()), path(
 
 from editorial.readiness import IssueReview
 urlpatterns += [path(base+'issues/<uuid:pk>/review/', IssueReview.as_view())]
+
+from events.reports import OperationalReports, OperationalReportExport
+urlpatterns += [path(base+'reports/', OperationalReports.as_view()), path(base+'reports/export/', OperationalReportExport.as_view())]
