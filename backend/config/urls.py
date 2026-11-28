@@ -30,3 +30,6 @@ urlpatterns += [path(base+'issues/', Issues.as_view()), path(base+'issues/<uuid:
 
 from editorial.presentation import Cover, Grid
 urlpatterns += [path(base+'issues/<uuid:pk>/cover/', Cover.as_view()), path(base+'issues/<uuid:pk>/grid/', Grid.as_view())]
+
+from editorial.features import Feature, Teasers
+urlpatterns += [path(base+'issues/<uuid:pk>/feature/', Feature.as_view()), path(base+'issues/<uuid:pk>/teasers/', Teasers.as_view())]

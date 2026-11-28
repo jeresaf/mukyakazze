@@ -19,6 +19,15 @@ class Issue(models.Model):
     cover_photo = models.ForeignKey('catalog.MediaAsset', null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     headshot = models.ForeignKey('catalog.MediaAsset', null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     grid_configuration = models.JSONField(default=dict, blank=True)
+    feature_title = models.CharField(max_length=150, blank=True, default='')
+    feature_subtitle = models.CharField(max_length=250, blank=True, default='')
+    feature_kicker = models.CharField(max_length=150, blank=True, default='')
+    feature_tips = models.JSONField(default=list, blank=True)
+    sponsor = models.ForeignKey('catalog.Sponsor', null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    sponsor_logo = models.ForeignKey('catalog.MediaAsset', null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    website_label = models.CharField(max_length=250, blank=True, default='')
+    whatsapp_label = models.CharField(max_length=250, blank=True, default='')
+    submission_contact = models.CharField(max_length=250, blank=True, default='')
     version = models.PositiveIntegerField(default=1)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -46,3 +55,18 @@ class IssueEvent(models.Model):
             models.UniqueConstraint(fields=['issue','rank'], name='editorial_issue_rank_unique'),
             models.CheckConstraint(condition=Q(rank__isnull=True) | Q(rank__gte=1,rank__lte=7), name='editorial_issue_rank_range'),
         ]
+
+
+class ComingUp(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    issue = models.ForeignKey(Issue, on_delete=models.PROTECT, related_name='teasers')
+    date = models.DateField()
+    name = models.CharField(max_length=200)
+    place = models.CharField(max_length=200)
+    category = models.ForeignKey('catalog.Category', on_delete=models.PROTECT)
+    source = models.CharField(max_length=500)
+    position = models.PositiveSmallIntegerField()
+
+    class Meta:
+        ordering = ['position', 'id']
+        constraints = [models.UniqueConstraint(fields=['issue', 'position'], name='editorial_teaser_position_unique'), models.CheckConstraint(condition=Q(position__gte=1, position__lte=30), name='editorial_teaser_position_range')]

@@ -212,3 +212,99 @@ def test_grid_stale_event_and_changed_date(occurrences):
     assert write(c,t,'put',path,{'expected_version':version,'entries':[entry(row,span=1)]}).status_code==409
     r=write(c,t,'patch',URL+i['id']+'/',{'expected_version':version,'grid_day':'2026-12-12'}); assert r.status_code==200,r.content
     result=c.get(path).json(); assert result['placements']==[] and any('Grid date changed' in w for w in result['warnings'])
+
+
+def feature_payload(**changes):
+    return {'expected_version':1, 'feature_title':'Synthetic guide', 'feature_subtitle':'Subtitle',
+            'feature_kicker':'Feature', 'feature_tips':[{'title':'Plan ahead','body':'Check the schedule.'}],
+            'sponsor_id':None, 'sponsor_logo_id':None, 'website_label':'example.test',
+            'whatsapp_label':'Public channel', 'submission_contact':'Public submissions', **changes}
+
+
+def test_feature_sponsor_tips_and_audit():
+    from catalog.models import Sponsor
+    c,t,u=staff('Editor'); i=issue(c,t); path=URL+i['id']+'/feature/'
+    sponsor=Sponsor.objects.create(name='Synthetic sponsor',contact_email='private@example.test')
+    logo=create_image(c,t,'logo')
+    tips=[{'title':'First','body':'A'*111},{'title':'Second','body':'B'}]
+    r=write(c,t,'put',path,feature_payload(sponsor_id=str(sponsor.pk),sponsor_logo_id=logo,feature_tips=tips))
+    assert r.status_code==200,r.content
+    result=r.json(); assert result['version']==2 and result['feature_tips']==tips
+    assert result['sponsor']['id']==str(sponsor.pk) and result['logo']['id']==logo
+    assert result['warnings'] and 'private@example.test' not in str(result)
+    assert c.get(path).json()==result
+    assert AuditEvent.objects.filter(actor=u,target_id=i['id'],action='issue_feature_updated').exists()
+    assert write(c,t,'put',path,feature_payload()).status_code==409
+
+
+def test_feature_validation_atomic():
+    from catalog.models import Sponsor
+    c,t,_=staff('Editor'); i=issue(c,t); path=URL+i['id']+'/feature/'
+    sponsor=Sponsor.objects.create(name='Synthetic sponsor'); photo=create_image(c,t,'photo'); logo=create_image(c,t,'logo')
+    for changes in [{'feature_tips':[{'title':'T','body':'B'}]*6}, {'feature_tips':[{'title':'T','body':''}]},
+                    {'sponsor_id':str(sponsor.pk),'sponsor_logo_id':photo}, {'sponsor_logo_id':logo},
+                    {'sponsor_id':'00000000-0000-0000-0000-000000000001'}, {'feature_fee':5000}]:
+        r=write(c,t,'put',path,feature_payload(**changes)); assert r.status_code==400,r.content
+    assert Issue.objects.get(pk=i['id']).version==1
+    assert c.get(path).json()['feature_title']==''
+
+
+def test_feature_archived_references():
+    from catalog.models import Sponsor,MediaAsset
+    c,t,_=staff('Editor'); i=issue(c,t); path=URL+i['id']+'/feature/'
+    sponsor=Sponsor.objects.create(name='Synthetic sponsor'); logo=create_image(c,t,'logo')
+    body=feature_payload(sponsor_id=str(sponsor.pk),sponsor_logo_id=logo)
+    r=write(c,t,'put',path,body); assert r.status_code==200,r.content
+    Sponsor.objects.filter(pk=sponsor.pk).update(is_active=False)
+    MediaAsset.objects.filter(pk=logo).update(is_active=False)
+    result=c.get(path).json(); assert not result['sponsor']['valid'] and not result['logo']['valid']
+    assert len(result['warnings'])>=2
+    assert write(c,t,'put',path,{**body,'expected_version':2}).status_code==400
+    assert write(c,t,'put',path,feature_payload(expected_version=2)).status_code==200
+
+
+def teaser_payload(**changes):
+    return {'date':'2026-12-17','name':'Synthetic upcoming event','place':'Synthetic place',
+            'category_id':str(Category.objects.get(code='MUSIC').pk),'source':'Synthetic confirmation reference',**changes}
+
+
+def test_teaser_order_replace_and_audit():
+    from editorial.models import ComingUp
+    c,t,u=staff('Editor'); i=issue(c,t); path=URL+i['id']+'/teasers/'
+    rows=[teaser_payload(),teaser_payload(date='2026-12-18',name='Second event')]
+    r=write(c,t,'put',path,{'expected_version':1,'entries':rows}); assert r.status_code==200,r.content
+    result=r.json(); assert result['version']==2 and [x['position'] for x in result['entries']]==[1,2]
+    assert all(x['verification_status']=='UNVERIFIED_EDITORIAL_TEASER' for x in result['entries'])
+    assert c.get(path).json()==result and Occurrence.objects.count()==0
+    assert AuditEvent.objects.filter(actor=u,target_id=i['id'],action='issue_teasers_replaced').exists()
+    assert write(c,t,'put',path,{'expected_version':1,'entries':[]}).status_code==409
+    r=write(c,t,'put',path,{'expected_version':2,'entries':rows[::-1]}); assert r.status_code==200,r.content
+    assert r.json()['entries'][0]['name']=='Second event' and ComingUp.objects.count()==2
+    assert write(c,t,'put',path,{'expected_version':3,'entries':[]}).status_code==200
+    assert ComingUp.objects.count()==0
+
+
+def test_teaser_invalid_rows_and_archived_category():
+    from editorial.models import ComingUp
+    c,t,_=staff('Administrator'); i=issue(c,t); path=URL+i['id']+'/teasers/'
+    row=teaser_payload()
+    for invalid in [[row,teaser_payload(date='2026-12-16')],[row,{**row,'name':row['name'].upper()}],
+                    [teaser_payload(source='')],[teaser_payload(category_id='00000000-0000-0000-0000-000000000001')],
+                    [teaser_payload(verification_status='VERIFIED')],[row]*31]:
+        r=write(c,t,'put',path,{'expected_version':1,'entries':invalid}); assert r.status_code==400,r.content
+    assert ComingUp.objects.count()==0 and Issue.objects.get(pk=i['id']).version==1
+    assert write(c,t,'put',path,{'expected_version':1,'entries':[row]}).status_code==200
+    Category.objects.filter(pk=row['category_id']).update(is_active=False)
+    result=c.get(path).json(); assert result['warnings'] and not result['entries'][0]['category_valid']
+    assert write(c,t,'put',path,{'expected_version':2,'entries':[row]}).status_code==400
+
+
+@pytest.mark.parametrize('role',['Collector','Verifier','Publisher'])
+def test_features_teasers_permissions_and_csrf(role):
+    admin,token,_=staff('Administrator'); i=issue(admin,token); c,t,_=staff(role)
+    for suffix,body in [('feature/',feature_payload()),('teasers/',{'expected_version':1,'entries':[]})]:
+        path=URL+i['id']+'/'+suffix
+        assert c.get(path).status_code==403
+        assert write(c,t,'put',path,body).status_code==403
+        assert Client().get(path).status_code==403
+        assert admin.put(path,body,content_type='application/json').status_code==403
